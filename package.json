@@ -1,0 +1,31 @@
+{
+  "name": "http_private_shop",
+  "version": "0.0.1",
+  "description": "FastEdge HTTP app: private members shop",
+  "scripts": {
+    "build": "npm-run-all -s clean build:wasm copy:wasm clean",
+    "build:wasm": "npx fastedge-build --input ./src/index.tsx --output ./build/http_private_shop.wasm --tsconfig ./tsconfig.json",
+    "copy:wasm": "npx cross-env NAME=http_private_shop npm run mv:file",
+    "mv:file": "mv build/$NAME.wasm ../../../wasm/http/js/privateShop/$NAME.wasm",
+    "lint": "eslint src/",
+    "clean": "rm -rf build"
+  },
+  "dependencies": {
+    "hono": "^4.6.0",
+    "jose": "^6.2.3",
+    "react": "^18.3.1",
+    "react-dom": "^18.3.1"
+  },
+  "devDependencies": {
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0"
+  },
+  "keywords": [
+    "http",
+    "fastedge",
+    "react",
+    "shop",
+    "members"
+  ],
+  "license": "ISC"
+}
