@@ -1,53 +1,41 @@
 import type { Context, Next } from "hono";
-import { getCookie, setCookie, deleteCookie } from "hono/cookie";
+import { getCookie } from "hono/cookie";
 import { getEnv } from "fastedge::env";
-import { mintToken, verifyToken, AUTH_COOKIE, TOKEN_MAX_AGE } from "./jwt";
+import { getStrategy } from "./strategy";
 import { verifySsoToken } from "./sso.js";
+import type { AuthStrategy } from "./types";
 
-export type AuthEnv = { Variables: { user: string } };
+export type { AuthEnv } from "./types";
 
-// Fast path only: verifies own auth_token. Runs on every route so nav can
-// show the logged-in username. Never touches the SSO cookie.
-export async function jwtAuth(c: Context, next: Next): Promise<void> {
-  const secret = getEnv("SESSION_SECRET");
-  const ownToken = getCookie(c, AUTH_COOKIE);
-  if (ownToken && secret) {
-    const username = await verifyToken(ownToken, secret);
-    if (username) {
-      c.set("user", username);
-    }
+// Single global auth middleware. Runs on every route so navigation can show the
+// logged-in username. Two steps:
+//   1. Fast path — resolve the origin's own credential via the active strategy.
+//   2. SSO bootstrap — if there's no local credential but an upstream sso_session
+//      cookie is present, verify it via JWKS once and exchange it for an origin
+//      credential, so subsequent requests use the fast path without re-fetching
+//      JWKS. Cookie modes only; header-trust mode has no credential to issue.
+export async function auth(c: Context, next: Next): Promise<void> {
+  const strategy = getStrategy();
+  let user = await strategy.authenticate(c);
+  if (!user && strategy.localLogin) {
+    user = await ssoBootstrap(c, strategy);
   }
+  if (user) c.set("user", user);
   await next();
 }
 
-// SSO bootstrap: run only on routes protected by the CDN filter (/checkout).
-// Verifies sso_session via JWKS and mints own auth_token so subsequent
-// requests use the fast path above without a further JWKS fetch.
-export async function ssoBootstrap(c: Context, next: Next): Promise<void> {
-  if (c.get("user")) return next();
-  const secret = getEnv("SESSION_SECRET");
+async function ssoBootstrap(c: Context, strategy: AuthStrategy): Promise<string | null> {
   const jwksUrl = getEnv("JWKS_URL");
-  if (jwksUrl && secret) {
-    const ssoCookieName = getEnv("SESSION_COOKIE") ?? "sso_session";
-    const ssoToken = getCookie(c, ssoCookieName);
-    if (ssoToken) {
-      const identity = await verifySsoToken(ssoToken, jwksUrl);
-      if (identity) {
-        // Prefer a human-readable display name over the raw SSO subject ID
-        const displayName = identity.name ?? identity.email ?? identity.sub;
-        const newToken = await mintToken(displayName, secret);
-        setCookie(c, AUTH_COOKIE, newToken, {
-          httpOnly: true,
-          secure: true,
-          sameSite: "Lax",
-          path: "/",
-          maxAge: TOKEN_MAX_AGE,
-        });
-        c.set("user", displayName);
-      }
-    }
-  }
-  await next();
+  if (!jwksUrl) return null;
+  const ssoCookieName = getEnv("SESSION_COOKIE") ?? "sso_session";
+  const ssoToken = getCookie(c, ssoCookieName);
+  if (!ssoToken) return null;
+  const identity = await verifySsoToken(ssoToken, jwksUrl);
+  if (!identity) return null;
+  // Prefer a human-readable display name over the raw SSO subject ID.
+  const displayName = identity.name ?? identity.email ?? identity.sub;
+  const issued = await strategy.issue(c, displayName);
+  return issued ? displayName : null;
 }
 
 export async function attemptLogin(
@@ -55,23 +43,15 @@ export async function attemptLogin(
   password: string,
   c: Context,
 ): Promise<boolean> {
+  const strategy = getStrategy();
+  if (!strategy.localLogin) return false;
   const expected = getEnv("PASSWORD") ?? "authme";
   if (!username || !timingSafeEqual(password, expected)) return false;
-  const secret = getEnv("SESSION_SECRET");
-  if (!secret) return false;
-  const token = await mintToken(username, secret);
-  setCookie(c, AUTH_COOKIE, token, {
-    httpOnly: true,
-    secure: true,
-    sameSite: "Lax",
-    path: "/",
-    maxAge: TOKEN_MAX_AGE,
-  });
-  return true;
+  return strategy.issue(c, username);
 }
 
-export function doLogout(c: Context): void {
-  deleteCookie(c, AUTH_COOKIE, { path: "/" });
+export async function doLogout(c: Context): Promise<void> {
+  await getStrategy().revoke(c);
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

@@ -6,6 +6,7 @@
 * buildDirectory: "http/js/privateShop"
 */
 import { Hono } from "hono";
+import { getCookie } from "hono/cookie";
 import { renderDocument } from "./render";
 import { siteConfig } from "./config";
 import { products } from "./data/products";
@@ -17,16 +18,20 @@ import { ContactPage } from "./components/ContactPage";
 import { ShopPage } from "./components/ShopPage";
 import { ProductPage } from "./components/ProductPage";
 import { BasketPage } from "./components/BasketPage";
-import { jwtAuth, ssoBootstrap, attemptLogin, doLogout, type AuthEnv } from "./auth/middleware";
+import { ManageSessionsPage } from "./components/ManageSessionsPage";
+import { auth, attemptLogin, doLogout, type AuthEnv } from "./auth/middleware";
+import { getStrategy } from "./auth/strategy";
+import { listSessions, deleteSession, deleteAllSessions, SESSION_COOKIE } from "./auth/session";
 
 const app = new Hono<AuthEnv>();
 
-app.use("*", jwtAuth);
-app.use("/checkout", ssoBootstrap);
+app.use("*", auth);
 
 // ── Auth routes ──────────────────────────────────────────────────────────────
 
 app.get("/login", (c) => {
+  // Header-trust mode has no local login — the edge authenticates upstream.
+  if (!getStrategy().localLogin) return c.redirect("/");
   const next = c.req.query("next") || "/";
   return c.html(renderDocument(<LoginPage next={next} />, `Login · ${siteConfig.name}`));
 });
@@ -40,9 +45,44 @@ app.post("/login", async (c) => {
   return c.html(renderDocument(<LoginPage next={next} error="Invalid username or password" />, `Login · ${siteConfig.name}`), 401);
 });
 
-app.post("/logout", (c) => {
-  doLogout(c);
+app.post("/logout", async (c) => {
+  await doLogout(c);
   return c.redirect("/");
+});
+
+// ── Session management routes (active only in cookie-session mode) ────────────
+// Registered unconditionally — AUTH_MODE can only be read at request time (not
+// during the Wizer build snapshot), so each handler gates itself: when the
+// active mode has no session admin, the route 404s as if it didn't exist.
+
+app.get("/manage-sessions", async (c) => {
+  if (!getStrategy().sessionAdmin) return c.notFound();
+  const user = c.get("user");
+  if (!user) return c.redirect("/login?next=/manage-sessions");
+  const sessions = await listSessions();
+  const currentSessionId = getCookie(c, SESSION_COOKIE) ?? "";
+  return c.html(renderDocument(
+    <ManageSessionsPage sessions={sessions} currentSessionId={currentSessionId} user={user} />,
+    `Manage Sessions · ${siteConfig.name}`,
+    false,
+    user,
+  ));
+});
+
+app.post("/manage-sessions/delete/:id", async (c) => {
+  if (!getStrategy().sessionAdmin) return c.notFound();
+  const user = c.get("user");
+  if (!user) return c.redirect("/login");
+  await deleteSession(c.req.param("id"));
+  return c.redirect("/manage-sessions");
+});
+
+app.post("/manage-sessions/purge", async (c) => {
+  if (!getStrategy().sessionAdmin) return c.notFound();
+  const user = c.get("user");
+  if (!user) return c.redirect("/login");
+  await deleteAllSessions();
+  return c.redirect("/login");
 });
 
 // ── Protected routes ─────────────────────────────────────────────────────────

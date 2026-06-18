@@ -8,7 +8,7 @@ Read `AGENTS.md` for company-wide agent rules. These are mandatory and override 
 
 ## What this app is (10-line version)
 
-`privateShop` is a Hono SSR shop compiled to a FastEdge WASM app. It is **not a product** — it is a **realism fixture**: a stand-in for a customer's existing website that already has login, used to prove Gcore's `saml-app` can enhance that login from the edge. We build it in two auth variants (stateless `hono/jwt`, and server-side session) so the integration story covers both kinds of customer. Do **not** rebuild SSO/SAML here — that lives in `saml-app`. The full rationale, decisions, and roadmap live in `context/` (see below).
+`privateShop` is a Hono SSR shop compiled to a FastEdge WASM app. It is **not a product** — it is a **realism fixture**: a stand-in for a customer's existing website that already has login, used to prove Gcore's `saml-app` can enhance that login from the edge. It is **one wasm** whose auth behavior is selected at runtime by the `AUTH_MODE` env var (`cookie-jwt` | `cookie-session` | `headers`), so a single build covers every kind of customer; deploy it as several apps with different env. Do **not** rebuild SSO/SAML here — that lives in `saml-app`. The rationale and current state live in `context/` (see below).
 
 ---
 
@@ -28,12 +28,10 @@ Follow the routing table in `context/INDEX.md`. Only read the file(s) relevant t
 
 | Task Type | What to Read |
 |-----------|--------------|
-| **Implement / change login here** | `context/architecture/jwt-app.md` + `context/design/decisions.md` |
-| **Why session vs JWT? / which is better?** | `context/design/session-vs-jwt.md` |
+| **How does auth/login work? change it** | `context/architecture/auth-modes.md` |
+| **Work on the session store / `/manage-sessions`** | `context/architecture/session-store.md` + `auth-modes.md` |
 | **What is this app for? / how does `saml-app` use it?** | `context/architecture/overview.md` |
 | **Should this ship inside `saml-app`? / is it too noisy?** | `context/design/fixture-vs-example.md` |
-| **Build the session variant** | `context/architecture/session-app.md` |
-| **What's done / what's the plan?** | `context/development-state.md` |
 
 ---
 
@@ -53,25 +51,22 @@ Follow the routing table in `context/INDEX.md`. Only read the file(s) relevant t
 ## Context Organization
 
 ```
-http/js/privateShop/
+private-shop/
 ├── CLAUDE.md                       ← YOU ARE HERE
 ├── AGENTS.md                       ← company-wide agent rules
 ├── context/
-│   ├── INDEX.md                    ← Read first (discovery hub)
+│   ├── INDEX.md                    ← Read first (discovery hub + current state)
 │   ├── architecture/
 │   │   ├── overview.md             ← product vision, saml-app, edge model
-│   │   ├── jwt-app.md              ← JWT variant (this branch)
-│   │   └── session-app.md          ← server-side session variant (future)
-│   ├── design/
-│   │   ├── session-vs-jwt.md       ← the two approaches + industry norms
-│   │   ├── why-two-apps.md         ← fixtures rationale
-│   │   ├── fixture-vs-example.md   ← realism fixture vs teaching example
-│   │   └── decisions.md            ← locked decisions log
-│   └── development-state.md        ← current progress + roadmap
+│   │   ├── auth-modes.md           ← CANONICAL: the 3 AUTH_MODE modes + strategy
+│   │   └── session-store.md        ← fastedge::cache store for cookie-session mode
+│   └── design/
+│       └── fixture-vs-example.md   ← realism fixture vs teaching example
 ├── src/
 │   ├── index.tsx                   ← Hono routes + FastEdge fetch handler
 │   ├── render.tsx                  ← SSR document renderer
 │   ├── config.ts                   ← site theme/config
+│   ├── auth/                       ← AuthStrategy interface + per-mode strategies
 │   ├── components/                 ← React page/UI components (SSR)
 │   └── data/                       ← product data
 └── package.json
@@ -82,7 +77,7 @@ http/js/privateShop/
 ## Quick Reference
 
 **Tech Stack:** TypeScript, Hono, React 18 (SSR), FastEdge WASM (StarlingMonkey runtime)
-**Branch:** `private-shop` (JWT variant)
+**Auth:** one wasm; `AUTH_MODE` env selects `cookie-jwt` (default) | `cookie-session` | `headers`
 
 **Common Commands:**
 

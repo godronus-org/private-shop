@@ -23,18 +23,21 @@ customer-facing teaching artifact is a separate, minimal example that lives in
 `saml-app` — do **not** fold this noisy shop into `saml-app`. This split is the
 governing decision; read [../design/fixture-vs-example.md](../design/fixture-vs-example.md).
 
-## Why two variants
+## Why multiple auth modes
 
-Real customers fall into two camps based on how they currently track logged-in
-users. We build one fixture per camp so our integration story covers both:
+Real customers integrate edge auth in different ways. We cover them all with a
+**single wasm** whose behavior is selected by the `AUTH_MODE` env var, then deploy
+that one build as several FastEdge apps — one per "customer". See
+[auth-modes.md](auth-modes.md) (the canonical auth reference).
 
-| Variant | Mechanism | Lives on | Represents |
-|---|---|---|---|
-| **JWT app** | Stateless HMAC JWT in HttpOnly cookie (`hono/jwt`) | `private-shop` branch | Modern/edge/serverless customers |
-| **Session app** | Opaque session id → server-side session store | `private-shop-session` branch | Classic stateful customers (PHP/Rails/Django-style) |
+| `AUTH_MODE` | Mechanism | Represents |
+|---|---|---|
+| `cookie-jwt` | Stateless HMAC JWT in HttpOnly cookie (`hono/jwt`) | Modern/edge/serverless customers |
+| `cookie-session` | Opaque session id → server-side session store | Classic stateful customers (PHP/Rails/Django-style) |
+| `headers` | Trusted edge-injected identity header | IAP / oauth2-proxy style customers (no origin credential) |
 
-Same shop, same UI — only the auth mechanism differs. See
-[../design/why-two-apps.md](../design/why-two-apps.md).
+Same shop, same UI — only the auth mechanism differs. It's one wasm; `AUTH_MODE`
+picks the behavior at runtime, and the same build is deployed as several apps.
 
 ## Edge-integration model (what we're ultimately proving)
 

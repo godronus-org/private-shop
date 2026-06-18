@@ -1,46 +1,41 @@
 # privateShop — Context Index
 
-> **How to use this folder:** Read *this index*, then open **only** the file(s)
-> relevant to your task. You do **not** need to read the whole `context/` tree to
-> help. Each file is one focused concept. Follow the pointers below.
+> Read this index, then open **only** the file(s) your task needs. Each file is
+> one focused concept.
 
-## What this app actually is
+## What this app is
 
-`privateShop` is **not a product**. It is a **test fixture** — a stand-in for a
-customer's existing website that already has login. We build **two variants** of
-it (JWT-based and session-based) to prove that Gcore's `saml-app` can enhance a
-customer's login from the edge, regardless of which auth mechanism they already
-use. See [architecture/overview.md](architecture/overview.md) first if you're new.
+`privateShop` is **not a product**. It is a **realism fixture** — a stand-in for a
+customer's existing website that already has login — used to prove Gcore's
+`saml-app` can enhance that login from the edge. Do **not** rebuild SSO/SAML here;
+that lives in `saml-app`.
+
+## Current state (2026-06-17)
+
+- **One wasm**, with auth behavior selected at runtime by the `AUTH_MODE` env var:
+  `cookie-jwt` (stateless HS256 JWT), `cookie-session` (server-side session +
+  `/manage-sessions`), or `headers` (trusted edge-injected identity).
+- All auth lives behind an `AuthStrategy` interface in `src/auth/`; the shop code
+  is identical across modes.
+- Deployed as the same wasm on two apps today: appId `847882` (`cookie-jwt`) and
+  appId `848393` (`cookie-session`). See [architecture/auth-modes.md](architecture/auth-modes.md).
+- Next: deploy/verify the unified wasm; then `saml-app` integration.
 
 ## Map
 
-### architecture/ — how things fit together
-- [overview.md](architecture/overview.md) — the product vision, where `saml-app`
-  fits, the edge-integration model, and why two fixture apps exist. **Start here.**
-- [jwt-app.md](architecture/jwt-app.md) — the **JWT variant** (this `private-shop`
-  branch): stateless HMAC JWT in an HttpOnly cookie via `hono/jwt`. The login flow.
-- [session-app.md](architecture/session-app.md) — the **server-side session
-  variant** (`private-shop-session` branch, complete): opaque session id + `fastedge::cache`-backed store. Deployed at `https://private-shop-session-4732724.fastedge.cdn.gc.onl/`.
+- [architecture/overview.md](architecture/overview.md) — what the app is, why it
+  exists, how `saml-app` fits, the edge-integration model. **Start here if new.**
+- [architecture/auth-modes.md](architecture/auth-modes.md) — **canonical** auth
+  reference: the three modes, the strategy abstraction, SSO bootstrap, env vars,
+  deployed apps.
+- [architecture/session-store.md](architecture/session-store.md) — the
+  `fastedge::cache` session store used by `cookie-session` mode.
+- [design/fixture-vs-example.md](design/fixture-vs-example.md) — why this noisy
+  shop stays standalone and `saml-app` ships its own minimal example instead.
 
-### design/ — decisions and trade-offs
-- [session-vs-jwt.md](design/session-vs-jwt.md) — the two auth approaches compared,
-  industry norms, and why a real customer would have one or the other.
-- [why-two-apps.md](design/why-two-apps.md) — rationale for building both variants
-  as fixtures, and what each one proves about `saml-app` integration.
-- [fixture-vs-example.md](design/fixture-vs-example.md) — **realism fixture vs
-  teaching example**: why the noisy shop stays standalone, why `saml-app` ships its
-  own minimal example, and the auth/website separation that's on the critical path.
-- [decisions.md](design/decisions.md) — locked decisions log (token format, where
-  credentials live, what gets gated).
+## Task → file routing
 
-### development-state.md — current progress + roadmap
-- [development-state.md](development-state.md) — what's built, what's next, and the
-  branch plan across both variants and `saml-app`.
-
-## Quick task → file routing
-- *"Implement / change login here"* → architecture/jwt-app.md + design/decisions.md
-- *"Add JWKS / ES256 verification so saml-app cookie variant works"* → **support_jwks.md** (complete task spec)
-- *"Why session vs JWT? / which is better?"* → design/session-vs-jwt.md
-- *"Should this ship inside saml-app? / is it too noisy?"* → design/fixture-vs-example.md
-- *"What is this app for? / how does saml-app use it?"* → architecture/overview.md
-- *"What's done / what's the plan?"* → development-state.md
+- *"How does login / auth work? change it"* → architecture/auth-modes.md
+- *"Work on the session store / manage-sessions"* → architecture/session-store.md + auth-modes.md
+- *"What is this app for? how does saml-app use it?"* → architecture/overview.md
+- *"Should this ship inside saml-app? is it too noisy?"* → design/fixture-vs-example.md
