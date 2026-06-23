@@ -391,6 +391,23 @@ a { color: inherit; text-decoration: none; }
   background: #fef2f2; border: 1px solid #fecaca; color: #b91c1c;
   border-radius: var(--radius); padding: 10px 14px; font-size: 14px; margin: 0 0 20px;
 }
+.sso-providers { display: flex; flex-direction: column; gap: 10px; margin-bottom: 20px; }
+.btn-sso {
+  display: flex; align-items: center; justify-content: center; gap: 10px;
+  width: 100%; height: 42px; padding: 0 16px;
+  border-radius: var(--radius); font-size: 14px; font-weight: 500;
+  text-decoration: none; transition: opacity 0.15s ease;
+}
+.btn-sso:hover { opacity: 0.85; }
+.btn-sso-google { background: #fff; border: 1px solid var(--color-border); color: #3c4043; }
+.btn-sso-github { background: #24292e; color: #fff; }
+.sso-divider {
+  display: flex; align-items: center; gap: 12px;
+  margin: 20px 0; color: var(--color-muted); font-size: 13px;
+}
+.sso-divider::before,.sso-divider::after {
+  content: ''; flex: 1; height: 1px; background: var(--color-border);
+}
 .checkout-page { padding: 40px 0; }
 .checkout-page h1 { font-size: 2rem; font-weight: 700; margin-bottom: 12px; }
 .checkout-welcome { color: var(--color-muted); margin: 0 0 32px; }

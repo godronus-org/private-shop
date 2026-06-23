@@ -5,7 +5,9 @@ import type { AuthStrategy } from "../types";
 // authenticated the user and injects their identity as a request header.
 // The origin trusts it directly — there is no origin-side credential, so there
 // is nothing to issue or revoke and no local /login. AUTH_HEADER overrides the
-// header name (default X-Forwarded-User).
+// identity header (default X-Forwarded-User; typically carries the stable sub).
+// DISPLAY_HEADER overrides the display-name header (default x-sso-name); falls
+// back to the AUTH_HEADER value so plain X-Forwarded-User deployments still work.
 //
 // SECURITY: only safe when the origin is reachable solely via the trusted edge,
 // which must strip any client-supplied copy of this header. This is a demo
@@ -15,9 +17,12 @@ export const headersStrategy: AuthStrategy = {
   sessionAdmin: false,
 
   async authenticate(c) {
-    const headerName = getEnv("AUTH_HEADER") ?? "X-Forwarded-User";
-    const user = c.req.header(headerName);
-    return user && user.length > 0 ? user : null;
+    const authHeader = getEnv("AUTH_HEADER") ?? "X-Forwarded-User";
+    const sub = c.req.header(authHeader);
+    if (!sub || sub.length === 0) return null;
+    const displayHeader = getEnv("DISPLAY_HEADER") ?? "x-sso-name";
+    const display = c.req.header(displayHeader);
+    return display && display.length > 0 ? display : sub;
   },
 
   async issue() {

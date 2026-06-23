@@ -10,16 +10,21 @@ customer's existing website that already has login — used to prove Gcore's
 `saml-app` can enhance that login from the edge. Do **not** rebuild SSO/SAML here;
 that lives in `saml-app`.
 
-## Current state (2026-06-17)
+## Current state (2026-06-18)
 
 - **One wasm**, with auth behavior selected at runtime by the `AUTH_MODE` env var:
   `cookie-jwt` (stateless HS256 JWT), `cookie-session` (server-side session +
   `/manage-sessions`), or `headers` (trusted edge-injected identity).
 - All auth lives behind an `AuthStrategy` interface in `src/auth/`; the shop code
   is identical across modes.
-- Deployed as the same wasm on two apps today: appId `847882` (`cookie-jwt`) and
+- **SSO integration (P2b done):** `/login` page shows Google + GitHub SSO buttons
+  (Mode B static links). When `JWKS_URL` is set, the middleware verifies
+  `sso_session` directly on each request — **no secondary credential minted**
+  (Cloudflare Access model, anti-pattern removed 2026-06-18).
+- **Logout (P6):** `POST /logout` chains through `/auth/logout` on the auth-app.
+  Two-hop, one `Set-Cookie` per response.
+- Deployed as the same wasm on two apps: appId `847882` (`cookie-jwt`) and
   appId `848393` (`cookie-session`). See [architecture/auth-modes.md](architecture/auth-modes.md).
-- Next: deploy/verify the unified wasm; then `saml-app` integration.
 
 ## Map
 

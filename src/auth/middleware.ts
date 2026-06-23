@@ -3,39 +3,37 @@ import { getCookie } from "hono/cookie";
 import { getEnv } from "fastedge::env";
 import { getStrategy } from "./strategy";
 import { verifySsoToken } from "./sso.js";
-import type { AuthStrategy } from "./types";
 
 export type { AuthEnv } from "./types";
 
-// Single global auth middleware. Runs on every route so navigation can show the
-// logged-in username. Two steps:
-//   1. Fast path — resolve the origin's own credential via the active strategy.
-//   2. SSO bootstrap — if there's no local credential but an upstream sso_session
-//      cookie is present, verify it via JWKS once and exchange it for an origin
-//      credential, so subsequent requests use the fast path without re-fetching
-//      JWKS. Cookie modes only; header-trust mode has no credential to issue.
+// Single global auth middleware. Two paths:
+//   1. Local credential — the active strategy's own cookie (local login).
+//   2. SSO direct verify — if JWKS_URL is set, verify the upstream sso_session
+//      JWT on each request. No secondary credential is minted; the SSO session
+//      IS the session (matches the Cloudflare Access model).
 export async function auth(c: Context, next: Next): Promise<void> {
   const strategy = getStrategy();
   let user = await strategy.authenticate(c);
-  if (!user && strategy.localLogin) {
-    user = await ssoBootstrap(c, strategy);
-  }
+  if (!user) user = await ssoVerify(c);
   if (user) c.set("user", user);
   await next();
 }
 
-async function ssoBootstrap(c: Context, strategy: AuthStrategy): Promise<string | null> {
+async function ssoVerify(c: Context): Promise<string | null> {
   const jwksUrl = getEnv("JWKS_URL");
   if (!jwksUrl) return null;
   const ssoCookieName = getEnv("SESSION_COOKIE") ?? "sso_session";
   const ssoToken = getCookie(c, ssoCookieName);
   if (!ssoToken) return null;
+  // NOTE: jose's createRemoteJWKSet caches the JWK in module memory, but
+  // FastEdge WASM runs each request in a fresh sandbox with no shared memory,
+  // so the JWK is fetched on every request here. A real customer's origin
+  // (Node, Go, etc.) runs long-lived processes where the cache is effective.
+  // This demo does not optimise for it — the fixture shows the pattern, not
+  // the performance profile.
   const identity = await verifySsoToken(ssoToken, jwksUrl);
   if (!identity) return null;
-  // Prefer a human-readable display name over the raw SSO subject ID.
-  const displayName = identity.name ?? identity.email ?? identity.sub;
-  const issued = await strategy.issue(c, displayName);
-  return issued ? displayName : null;
+  return identity.name ?? identity.email ?? identity.sub;
 }
 
 export async function attemptLogin(

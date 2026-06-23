@@ -80,22 +80,41 @@ Both cookie modes harden the credential cookie identically:
 *signed, not encrypted* (FastEdge has HMAC sign/verify, no encrypt) — username
 only, never secrets.
 
-## SSO bootstrap (cookie modes only)
+## SSO direct verify (all modes)
 
-When `JWKS_URL` is set, the unified `auth` middleware does a one-time token
-exchange: no local credential + an `sso_session` cookie present → verify it via
-JWKS (ES256, `jose`, in `src/auth/sso.ts`) → `strategy.issue(...)` mints the
-origin credential. Subsequent requests use the fast path. Runs globally (any
-route), but the JWKS fetch only fires the one time there's an SSO cookie and no
-local credential. `headers` mode skips bootstrap (the edge already did the work).
+When `JWKS_URL` is set, the `auth` middleware verifies `sso_session` directly on
+each request (after the local strategy's `authenticate` fails or returns null).
+`verifySsoToken` in `src/auth/sso.ts` validates the ES256 JWT against the JWKS
+endpoint, returning `name ?? email ?? sub` as the display identity. **No secondary
+credential is minted** — `sso_session` is the session, full stop.
 
-> **Open security question (logout):** the cookie modes re-exchange `sso_session`
-> for an *independent* origin credential, so this app's session lifetime is
-> decoupled from the edge SSO session — neither side's logout propagates to the
-> other. `headers` mode has no local credential, so it has no meaningful local
-> logout at all (sign-out must be delegated to an edge logout endpoint that
-> doesn't exist yet). Tracked in `saml-app/context/security-issues.md` → SEC-8;
-> resolving it may change how this app handles cookies.
+This matches the Cloudflare Access model: the edge issues one JWT cookie
+(`CF_Authorization` / `sso_session`), and the origin reads it directly. There is
+no cookie exchange, no decoupled session lifetime, and no bootstrapping.
+
+> **FastEdge caching note:** `jose`'s `createRemoteJWKSet` caches the fetched JWK
+> in module memory. FastEdge runs each request in a fresh WASM sandbox, so the
+> cache is not effective here and the JWKS endpoint is hit on every SSO-authenticated
+> request. On a real customer's origin (Node, Go, etc.) running long-lived processes
+> this caching works correctly and is the intended model. The fixture shows the
+> pattern; performance optimisation is the customer's concern.
+
+## Logout flow
+
+`POST /logout` (private-shop "Sign out" form) is a **two-hop chain**, one
+`Set-Cookie` per response (required by the FastEdge CDN — see
+`saml-app/context/SET_COOKIE.md`):
+
+1. **Hop 1 — private-shop** (`POST /logout`): `strategy.revoke()` clears the
+   local `auth_token` cookie (a no-op for SSO users who don't have one), then
+   302s to `/auth/logout?redirect=/`.
+2. **Hop 2 — auth-app** (`GET /auth/logout`): clears `sso_session` (`Max-Age=0`),
+   302s to `/` (or a validated `?redirect=` destination).
+
+After both hops the edge filter sees no `sso_session` on the next request and
+redirects the user to the login chooser. For `headers` mode the hop-1 revoke is a
+no-op (no local credential); hop 2 still clears `sso_session` and the filter
+blocks immediately.
 
 ## Env var matrix
 
@@ -117,8 +136,14 @@ local credential. `headers` mode skips bootstrap (the edge already did the work)
 | App | appId | `AUTH_MODE` | URL |
 |---|---|---|---|
 | private-shop | `847882` | `cookie-jwt` | https://private-shop-4732724.fastedge.cdn.gc.onl/ |
-| private-shop-session | `848393` | `cookie-session` | https://private-shop-session-4732724.fastedge.cdn.gc.onl/ |
-| (optional) headers demo | — | `headers` | — |
+| private-shop-session | `848393` | `headers` *(see note)* | https://private-shop-session-4732724.fastedge.cdn.gc.onl/ |
+
+> **Note:** `848393` is named `private-shop-session` but is currently set to
+> `AUTH_MODE=headers` — it is the origin for the `saml-app` **header** integration demo on
+> CDN resource `12642140` (`shop.godronus.xyz`), where the edge filter injects
+> `X-Forwarded-User`. In `headers` mode it has no local credential, so the bare
+> `private-shop-session-…fastedge` URL is not usable standalone (no edge to inject the header).
+> If you need the `cookie-session` demo back, flip `AUTH_MODE=cookie-session` (and update this row).
 
 Build once (`npm run build`); deploy the one wasm to each app with its own env.
 The single magic-comment block in `index.tsx` targets the `cookie-jwt` app; the

@@ -47,7 +47,7 @@ app.post("/login", async (c) => {
 
 app.post("/logout", async (c) => {
   await doLogout(c);
-  return c.redirect("/");
+  return c.redirect("/auth/logout?redirect=/");
 });
 
 // ── Session management routes (active only in cookie-session mode) ────────────
