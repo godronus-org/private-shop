@@ -64,6 +64,14 @@ redirects to `/`). This is the IAP / oauth2-proxy integration pattern.
 > trusted edge, which must strip any client-supplied copy of the header. This is a
 > demo fixture; a real deployment would also pin the edge's identity.
 
+### `mfa-filtered` / `mfa-verify` (PLANNED, not built) — second factor at the edge
+Two modes that keep the local password login but defer all OTP enrol/verify to the
+`totp-app`, inserting a handoff redirect after the password step (via a new
+`AuthStrategy.startSecondFactor` hook). **`mfa-filtered`** lets the totp-app Rust filter
+enforce `mfa_session` (minimal origin work — the headline bolt-on); **`mfa-verify`** has
+the origin verify a one-time **ES256 proof** via **JWKS** (reusing `src/auth/sso.ts`; no
+filter). Full spec: [mfa-mode.md](mfa-mode.md). Not yet implemented.
+
 ## Shared login flow & cookie hardening (cookie modes)
 
 1. Anonymous user clicks **"Proceed to checkout"** → `GET /checkout` redirects to

@@ -35,6 +35,10 @@ that lives in `saml-app`.
   deployed apps.
 - [architecture/session-store.md](architecture/session-store.md) — the
   `fastedge::cache` session store used by `cookie-session` mode.
+- [architecture/mfa-mode.md](architecture/mfa-mode.md) — **PLAN (not built):** two new
+  modes that keep the password step here and defer TOTP to the edge `totp-app` —
+  `mfa-filtered` (Rust filter enforces; headline bolt-on) and `mfa-verify` (origin
+  verifies an ES256 proof via JWKS; no filter). For the MFA integration milestone.
 - [design/fixture-vs-example.md](design/fixture-vs-example.md) — why this noisy
   shop stays standalone and `saml-app` ships its own minimal example instead.
 
@@ -44,3 +48,4 @@ that lives in `saml-app`.
 - *"Work on the session store / manage-sessions"* → architecture/session-store.md + auth-modes.md
 - *"What is this app for? how does saml-app use it?"* → architecture/overview.md
 - *"Should this ship inside saml-app? is it too noisy?"* → design/fixture-vs-example.md
+- *"Add MFA / second factor / wire up totp-app"* → architecture/mfa-mode.md (PLAN)
