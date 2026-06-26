@@ -1,7 +1,7 @@
 {
   "name": "private-shop",
   "api_type": "wasi-http",
-  "description": "Private members shop — a realistic stand-in for a customer's existing site with login. AUTH_MODE selects how authentication is verified: cookie-jwt (HMAC JWT), cookie-session (server-side session), headers (X-Forwarded-User from upstream), mfa-filtered (hands off to TOTP filter), or mfa-verify (validates TOTP challenge ticket).",
+  "description": "Private members shop — a realistic stand-in for a customer's existing site with login.",
   "params": [
     {
       "name": "AUTH_MODE",
