@@ -12,7 +12,7 @@
     },
     {
       "name": "SESSION_SECRET",
-      "data_type": "string",
+      "data_type": "secret",
       "mandatory": false,
       "descr": "Random 32-byte base64url string. Required for cookie-jwt mode — signs and verifies the session JWT. Not used in cookie-session or headers modes.",
       "metadata": "{}"
