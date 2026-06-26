@@ -43,13 +43,21 @@ export async function attemptLogin(
 ): Promise<boolean> {
   const strategy = getStrategy();
   if (!strategy.localLogin) return false;
-  const expected = getEnv("PASSWORD") ?? "authme";
-  if (!username || !timingSafeEqual(password, expected)) return false;
+  if (!checkPassword(username, password)) return false;
   return strategy.issue(c, username);
 }
 
 export async function doLogout(c: Context): Promise<void> {
   await getStrategy().revoke(c);
+}
+
+// Check username/password without issuing a credential. Exported so that
+// routes which need to hand off to a second factor (mfa-filtered, mfa-verify)
+// can validate the password before calling strategy.startSecondFactor.
+export function checkPassword(username: string, password: string): boolean {
+  if (!username) return false;
+  const expected = getEnv("PASSWORD") ?? "authme";
+  return timingSafeEqual(password, expected);
 }
 
 function timingSafeEqual(a: string, b: string): boolean {

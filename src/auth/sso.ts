@@ -1,4 +1,5 @@
 import { createRemoteJWKSet, jwtVerify } from "jose";
+import { getEnv } from "fastedge::env";
 
 const CLAIM_NAMES = ["email", "name", "picture", "given_name", "family_name"] as const;
 type ClaimName = (typeof CLAIM_NAMES)[number];
@@ -25,6 +26,33 @@ export async function verifySsoToken(
       }
     }
     return identity;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Verify an ES256 mfa_proof JWT issued by totp-app against the JWKS endpoint
+ * at jwksUrl. Binds the proof to expectedSub (must match payload.sub) and
+ * optionally checks audience/issuer via MFA_AUDIENCE/MFA_ISSUER env vars.
+ * Returns { sub } on success, null on any failure (expired, bad sig, sub
+ * mismatch, missing claims, etc.).
+ */
+export async function verifyMfaProof(
+  proof: string,
+  jwksUrl: string,
+  expectedSub: string,
+): Promise<{ sub: string } | null> {
+  try {
+    const JWKS = createRemoteJWKSet(new URL(jwksUrl));
+    const opts: Record<string, unknown> = { algorithms: ["ES256"] };
+    const aud = getEnv("MFA_AUDIENCE");
+    const iss = getEnv("MFA_ISSUER");
+    if (aud) opts.audience = aud;
+    if (iss) opts.issuer = iss;
+    const { payload } = await jwtVerify(proof, JWKS, opts);
+    if (typeof payload.sub !== "string" || payload.sub !== expectedSub) return null;
+    return { sub: payload.sub };
   } catch {
     return null;
   }

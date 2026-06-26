@@ -1,0 +1,37 @@
+name: Publish Private Shop Template
+
+on:
+  workflow_dispatch:
+
+jobs:
+  build_and_publish:
+    name: Build and publish template
+    runs-on: ubuntu-latest
+    env:
+      GCORE_API_URL: https://api.preprod.world
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js and install dependencies
+        uses: ./.github/setup-node
+
+      - name: Build WASM
+        run: pnpm run build
+
+      - name: Read private-shop template
+        id: private-shop
+        run: |
+          echo "descr=$(jq -r '.description' templates/private-shop.json)" >> "$GITHUB_OUTPUT"
+          echo "params=$(jq -c '.params' templates/private-shop.json)" >> "$GITHUB_OUTPUT"
+
+      - name: Deploy private-shop
+        uses: gcore-github-actions/fastedge/deploy-template@feature/template-deploy
+        with:
+          api_key: ${{ secrets.GCORE_API_KEY }}
+          api_url: ${{ env.GCORE_API_URL }}
+          wasm_file: build/http_private_shop.wasm
+          template_name: private-shop
+          short_descr: ${{ steps.private-shop.outputs.descr }}
+          params: ${{ steps.private-shop.outputs.params }}

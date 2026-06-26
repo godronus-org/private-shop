@@ -19,4 +19,11 @@ export interface AuthStrategy {
   readonly localLogin: boolean;
   // Does this mode expose the /manage-sessions admin surface?
   readonly sessionAdmin: boolean;
+  // If present, this strategy requires a second factor. POST /login returns this
+  // Response instead of issue()+redirect; the strategy issues auth_token at the
+  // correct time (immediately for mfa-filtered, after proof return for mfa-verify).
+  startSecondFactor?(c: Context, user: string, next: string): Promise<Response>;
+  // If present, the sign-out handler redirects here (instead of /auth/logout)
+  // so edge-issued cookies (mfa_session, mfa_proof) are also cleared.
+  logoutRedirectUrl?(): string;
 }

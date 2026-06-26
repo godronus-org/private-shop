@@ -1,5 +1,5 @@
 import { getCookie, setCookie, deleteCookie } from "hono/cookie";
-import { getEnv } from "fastedge::env";
+import { getSecret } from "fastedge::secret";
 import { mintToken, verifyToken, AUTH_COOKIE, TOKEN_MAX_AGE } from "../jwt";
 import type { AuthStrategy } from "../types";
 
@@ -10,14 +10,14 @@ export const cookieJwtStrategy: AuthStrategy = {
   sessionAdmin: false,
 
   async authenticate(c) {
-    const secret = getEnv("SESSION_SECRET");
+    const secret = getSecret("SESSION_SECRET");
     const token = getCookie(c, AUTH_COOKIE);
     if (token && secret) return verifyToken(token, secret);
     return null;
   },
 
   async issue(c, user) {
-    const secret = getEnv("SESSION_SECRET");
+    const secret = getSecret("SESSION_SECRET");
     if (!secret) return false;
     const token = await mintToken(user, secret);
     setCookie(c, AUTH_COOKIE, token, {

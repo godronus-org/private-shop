@@ -2,8 +2,7 @@
 * appName: "private-shop"
 * appId: "847882"
 * appUrl: "https://private-shop-4732724.fastedge.cdn.gc.onl/"
-* outputFile: "wasm/http/js/privateShop/http_private_shop.wasm"
-* buildDirectory: "http/js/privateShop"
+* outputFile: "private-shop/build/http_private_shop.wasm"
 */
 import { Hono } from "hono";
 import { getCookie } from "hono/cookie";
@@ -19,8 +18,11 @@ import { ShopPage } from "./components/ShopPage";
 import { ProductPage } from "./components/ProductPage";
 import { BasketPage } from "./components/BasketPage";
 import { ManageSessionsPage } from "./components/ManageSessionsPage";
-import { auth, attemptLogin, doLogout, type AuthEnv } from "./auth/middleware";
+import { auth, checkPassword, doLogout, type AuthEnv } from "./auth/middleware";
 import { getStrategy } from "./auth/strategy";
+import { getAuthMode } from "./auth/mode";
+import { handleMfaStart } from "./auth/strategies/mfaFiltered";
+import { handleMfaReturn } from "./auth/strategies/mfaVerify";
 import { listSessions, deleteSession, deleteAllSessions, SESSION_COOKIE } from "./auth/session";
 
 const app = new Hono<AuthEnv>();
@@ -41,13 +43,21 @@ app.post("/login", async (c) => {
   const username = String(body.username ?? "");
   const password = String(body.password ?? "");
   const next = String(body.next ?? "/");
-  if (await attemptLogin(username, password, c)) return c.redirect(next || "/");
-  return c.html(renderDocument(<LoginPage next={next} error="Invalid username or password" />, `Login · ${siteConfig.name}`), 401);
+  const strategy = getStrategy();
+  if (!strategy.localLogin) return c.redirect("/");
+  if (!checkPassword(username, password)) {
+    return c.html(renderDocument(<LoginPage next={next} error="Invalid username or password" />, `Login · ${siteConfig.name}`), 401);
+  }
+  if (strategy.startSecondFactor) return strategy.startSecondFactor(c, username, next || "/");
+  if (await strategy.issue(c, username)) return c.redirect(next || "/");
+  return c.html(renderDocument(<LoginPage next={next} error="Login failed — please try again" />, `Login · ${siteConfig.name}`), 401);
 });
 
 app.post("/logout", async (c) => {
   await doLogout(c);
-  return c.redirect("/auth/logout?redirect=/");
+  const strategy = getStrategy();
+  const dest = strategy.logoutRedirectUrl?.() ?? "/auth/logout?redirect=/";
+  return c.redirect(dest, 302);
 });
 
 // ── Session management routes (active only in cookie-session mode) ────────────
@@ -83,6 +93,25 @@ app.post("/manage-sessions/purge", async (c) => {
   if (!user) return c.redirect("/login");
   await deleteAllSessions();
   return c.redirect("/login");
+});
+
+// ── MFA routes ───────────────────────────────────────────────────────────────
+// Registered unconditionally — AUTH_MODE can only be read at request time (not
+// during the Wizer build snapshot), so each handler gates itself by mode.
+
+// mfa-filtered: filter re-challenge target. The Rust filter redirects here
+// (with ?redirect=<original>) when mfa_session has expired. If auth_token is
+// present we mint a fresh handoff ticket → 303 to edge (no re-password).
+app.get("/mfa/start", (c) => {
+  if (getAuthMode() !== "mfa-filtered") return c.notFound();
+  return handleMfaStart(c);
+});
+
+// mfa-verify: proof exchange. totp-app redirects here after issuing mfa_proof.
+// Verifies the ES256 proof via JWKS, clears temporary cookies, issues auth_token.
+app.get("/mfa/return", (c) => {
+  if (getAuthMode() !== "mfa-verify") return c.notFound();
+  return handleMfaReturn(c);
 });
 
 // ── Protected routes ─────────────────────────────────────────────────────────

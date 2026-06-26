@@ -12,7 +12,7 @@ customers", deploy the *same* wasm as several FastEdge apps, each with a differe
 `AUTH_MODE`.
 
 ```
-AUTH_MODE = cookie-jwt | cookie-session | headers   (default: cookie-jwt)
+AUTH_MODE = cookie-jwt | cookie-session | headers | mfa-filtered | mfa-verify   (default: cookie-jwt)
 ```
 
 The shop itself (components, render, config, data, the `/login` form, the SSO
@@ -64,13 +64,26 @@ redirects to `/`). This is the IAP / oauth2-proxy integration pattern.
 > trusted edge, which must strip any client-supplied copy of the header. This is a
 > demo fixture; a real deployment would also pin the edge's identity.
 
-### `mfa-filtered` / `mfa-verify` (PLANNED, not built) — second factor at the edge
-Two modes that keep the local password login but defer all OTP enrol/verify to the
-`totp-app`, inserting a handoff redirect after the password step (via a new
-`AuthStrategy.startSecondFactor` hook). **`mfa-filtered`** lets the totp-app Rust filter
-enforce `mfa_session` (minimal origin work — the headline bolt-on); **`mfa-verify`** has
-the origin verify a one-time **ES256 proof** via **JWKS** (reusing `src/auth/sso.ts`; no
-filter). Full spec: [mfa-mode.md](mfa-mode.md). Not yet implemented.
+### `mfa-filtered` — second factor via totp-app Rust filter (Profile A)
+`src/auth/strategies/mfaFiltered.ts`. Keeps the local password login; after password OK
+signs an HS256 handoff ticket (`HANDOFF_KEY`) and 303s to `TOTP_CHALLENGE_URL`. The
+origin issues `auth_token` **immediately** after password (identity), but the totp-app
+Rust filter blocks every protected path until `mfa_session` is also present — so a
+pre-MFA `auth_token` grants nothing on its own. Adds `GET /mfa/start` (the filter's
+re-challenge target when `mfa_session` expires — no re-password if `auth_token` is
+still valid). `authenticate`/`issue`/`revoke` delegate to `cookieJwtStrategy`.
+Full spec: [mfa-mode.md](mfa-mode.md).
+
+### `mfa-verify` — second factor via origin JWKS proof verification (Profile B)
+`src/auth/strategies/mfaVerify.ts`. No filter. After password OK, sets a short-lived
+`pre_mfa` HttpOnly cookie (max-age 300s, carries username) — **no `auth_token` yet** —
+signs a handoff ticket pointing back to `/mfa/return`, and 303s to `TOTP_CHALLENGE_URL`.
+totp-app issues a one-time ES256 `mfa_proof` cookie; `/mfa/return` verifies it via
+`createRemoteJWKSet(TOTP_JWKS_URL)` + `jwtVerify` (binding `sub` to `pre_mfa`),
+then clears both temporary cookies and issues `auth_token`. `verifyMfaProof` lives in
+`src/auth/sso.ts` (mirrors `verifySsoToken`; adds `sub` binding + optional
+`MFA_AUDIENCE`/`MFA_ISSUER` checks). `authenticate`/`issue`/`revoke` delegate to
+`cookieJwtStrategy`. Full spec: [mfa-mode.md](mfa-mode.md).
 
 ## Shared login flow & cookie hardening (cookie modes)
 
@@ -131,11 +144,18 @@ blocks immediately.
 | `cookie-jwt` | `AUTH_MODE=cookie-jwt`, `SESSION_SECRET`, `PASSWORD` | `JWKS_URL`, `SESSION_COOKIE` |
 | `cookie-session` | `AUTH_MODE=cookie-session`, `PASSWORD` | `JWKS_URL`, `SESSION_COOKIE` |
 | `headers` | `AUTH_MODE=headers` | `AUTH_HEADER` |
+| `mfa-filtered` | `AUTH_MODE=mfa-filtered`, `SESSION_SECRET`, `PASSWORD`, `HANDOFF_KEY`, `TOTP_CHALLENGE_URL` | `TICKET_TTL`, `TOTP_ENROLL_URL`, `ENROLL_API_KEY` |
+| `mfa-verify` | `AUTH_MODE=mfa-verify`, `SESSION_SECRET`, `PASSWORD`, `HANDOFF_KEY`, `TOTP_CHALLENGE_URL`, `TOTP_JWKS_URL` | `TICKET_TTL`, `MFA_PROOF_COOKIE`, `MFA_AUDIENCE`, `MFA_ISSUER`, `TOTP_ENROLL_URL`, `ENROLL_API_KEY` |
 
 - `PASSWORD` defaults to `"authme"` if unset (cookie modes).
 - `SESSION_COOKIE` is the **name of the upstream SSO cookie** to read (default
   `sso_session`) — *not* the origin's own cookie. (Pre-existing, slightly
   confusing naming; preserved to avoid breaking deployments.)
+- `TICKET_TTL` defaults to `"90"` seconds (HS256 handoff ticket lifetime).
+- `MFA_PROOF_COOKIE` defaults to `"mfa_proof"` (name of the ES256 proof cookie
+  set by totp-app in `mfa-verify` mode).
+- `MFA_AUDIENCE` / `MFA_ISSUER` — optional JWT audience/issuer checks on the
+  `mfa_proof` in `mfa-verify` mode; omit to skip those claims checks.
 - If `AUTH_MODE` is unset/invalid, the app defaults to `cookie-jwt` so a bare app
   behaves like the original private-shop.
 

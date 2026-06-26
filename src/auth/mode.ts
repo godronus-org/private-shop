@@ -3,9 +3,9 @@ import { getEnv } from "fastedge::env";
 // Which auth integration this deployment emulates. One wasm; the behavior is
 // selected at runtime by the AUTH_MODE env var so a single build can be deployed
 // as several independent "customer" apps. See context/architecture.
-export type AuthMode = "cookie-jwt" | "cookie-session" | "headers";
+export type AuthMode = "cookie-jwt" | "cookie-session" | "headers" | "mfa-filtered" | "mfa-verify";
 
-const VALID: readonly AuthMode[] = ["cookie-jwt", "cookie-session", "headers"];
+const VALID: readonly AuthMode[] = ["cookie-jwt", "cookie-session", "headers", "mfa-filtered", "mfa-verify"];
 
 // Default to cookie-jwt so an app with no AUTH_MODE set behaves like the
 // original private-shop (stateless HMAC JWT) rather than failing closed.
