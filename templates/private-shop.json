@@ -5,14 +5,14 @@
   "params": [
     {
       "name": "AUTH_MODE",
-      "data_type": "string",
+      "data_type": "enum",
       "mandatory": false,
       "descr": "Authentication mode. Selects which strategy the shop uses to verify identity.",
-      "metadata": "{}"
+      "metadata": "{\"enum_values\":[{\"value\":\"cookie-jwt\",\"label\":\"Cookie JWT\"},{\"value\":\"cookie-session\",\"label\":\"Cookie Session\"},{\"value\":\"headers\",\"label\":\"Headers\"},{\"value\":\"mfa-filtered\",\"label\":\"MFA Filtered\"},{\"value\":\"mfa-verify\",\"label\":\"MFA Verify\"}],\"default_value\":\"cookie-jwt\"}"
     },
     {
       "name": "SESSION_SECRET",
-      "data_type": "secret",
+      "data_type": "string",
       "mandatory": false,
       "descr": "Random 32-byte base64url string. Required for cookie-jwt mode — signs and verifies the session JWT. Not used in cookie-session or headers modes.",
       "metadata": "{}"
