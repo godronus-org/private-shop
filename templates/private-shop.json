@@ -5,10 +5,10 @@
   "params": [
     {
       "name": "AUTH_MODE",
-      "data_type": "enum",
+      "data_type": "string",
       "mandatory": false,
       "descr": "Authentication mode. Selects which strategy the shop uses to verify identity.",
-      "metadata": "{\"enum_values\":[{\"value\":\"cookie-jwt\",\"label\":\"Cookie JWT\"},{\"value\":\"cookie-session\",\"label\":\"Cookie Session\"},{\"value\":\"headers\",\"label\":\"Headers\"},{\"value\":\"mfa-filtered\",\"label\":\"MFA Filtered\"},{\"value\":\"mfa-verify\",\"label\":\"MFA Verify\"}],\"default_value\":\"cookie-jwt\"}"
+      "metadata": "{}"
     },
     {
       "name": "SESSION_SECRET",
