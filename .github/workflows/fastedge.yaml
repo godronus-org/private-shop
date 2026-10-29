@@ -1,0 +1,29 @@
+# FastEdge: builds this repo's .wasm into versions for the Gcore portal's
+# Deployments tab. The portal deploys; this workflow holds no Gcore credentials.
+# Uncomment a trigger to change how versions are made.
+name: FastEdge
+
+on:
+  # A — "Create release" in GitHub: assets attached to that Release.
+  release:
+    types: [published]
+  # B — pushing a v* tag creates the Release.
+  # push:
+  #   tags: ["v*"]
+  # C — every merge to main becomes a pre-release "main-<sha7>".
+  # push:
+  #   branches: [main]
+  # D — pull requests build a preview (not for PRs from forks).
+  pull_request:
+
+permissions:
+  contents: write
+
+jobs:
+  fastedge:
+    uses: godronus-org/fastedge-actions/.github/workflows/fastedge-release.yaml@v1
+    # with:
+    #   build-command: npm run build:wasm
+    #   output: dist/app.wasm
+    #   test-command: npm test
+    #   run-tests: false
