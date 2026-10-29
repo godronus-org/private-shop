@@ -8,11 +8,10 @@ on:
   release:
     types: [published]
   # B — pushing a v* tag creates the Release.
-  # push:
-  #   tags: ["v*"]
   # C — every merge to main becomes a pre-release "main-<sha7>".
-  # push:
-  #   branches: [main]
+  push:
+    tags: ["v*"]
+    branches: [main]
   # D — pull requests build a preview (not for PRs from forks).
   pull_request:
 
